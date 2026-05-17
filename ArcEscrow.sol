@@ -10,7 +10,7 @@ contract ArcEscrow {
     address public usdcToken;
     address public buyer;
     address public seller;
-    address public arbiter; // ওনার বা আরবিট্রেটর যিনি বিবাদ মেটাতে পারবেন
+    address public arbiter; // Owner or arbitrator who can resolve disputes
     uint256 public amount;
     bool public isApproved;
     bool public isFunded;
@@ -19,7 +19,7 @@ contract ArcEscrow {
         usdcToken = _usdcToken;
         buyer = msg.sender;
         seller = _seller;
-        arbiter = msg.sender; // ডেপ্লয়কারী ব্যক্তিই আরবিট্রেটর
+        arbiter = msg.sender; // The deployer is set as the arbitrator
         amount = _amount;
     }
 
