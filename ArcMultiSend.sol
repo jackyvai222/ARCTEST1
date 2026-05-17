@@ -13,8 +13,10 @@ contract ArcRewardsNFT {
     uint256 public rewardPool;
 
     mapping(address => uint256) public nftBalances;
+    // Tracks how much reward each user has already claimed
     mapping(address => uint256) public rewardsClaimed; 
     
+    // Global tracking rate scaled by 1e18 to prevent precision loss
     uint256 private totalRewardPerNFT;
 
     constructor(address _usdcToken) {
@@ -22,31 +24,32 @@ contract ArcRewardsNFT {
     }
 
     function mintNFT() external {
+        // Safe transfer of USDC from user to this contract
         IERC20(usdcToken).safeTransferFrom(msg.sender, address(this), mintPrice);
         
         nftBalances[msg.sender] += 1;
         totalMinted += 1;
         rewardPool += mintPrice;
         
-        // Update global reward tracking without losing precision
-        totalRewardPerNFT = rewardPool / totalMinted;
+        // Dynamic global tracking to prevent any mathematical truncation
+        totalRewardPerNFT = (rewardPool * 10**18) / totalMinted;
     }
 
     function claimReward() external {
         uint256 totalNFTs = nftBalances[msg.sender];
         require(totalNFTs > 0, "Must own at least one NFT");
         
-        // Secure mathematical tracking
-        uint256 totalOwed = totalRewardPerNFT * totalNFTs;
+        // Calculate precise share using the 1e18 multiplier
+        uint256 totalOwed = (totalRewardPerNFT * totalNFTs) / 10**18;
         uint256 share = totalOwed - rewardsClaimed[msg.sender];
         
         require(share > 0, "No rewards available or already claimed");
 
-        // Update state before interaction (Prevents Reentrancy)
+        // Update state before external interaction (Checks-Effects-Interactions pattern)
         rewardsClaimed[msg.sender] += share;
         rewardPool -= share;
 
-        // safeTransfer for token transfer
+        // Safe transfer of the reward tokens back to the user
         IERC20(usdcToken).safeTransfer(msg.sender, share);
     }
 }
