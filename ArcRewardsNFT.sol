@@ -8,41 +8,48 @@ contract ArcRewardsNFT {
     using SafeERC20 for IERC20;
 
     address public usdcToken;
-    uint256 public mintPrice = 5 * 10**6; // 5 USDC (assuming 6 decimals)
+    uint256 public mintPrice = 5 * 10**6; // 5 USDC (6 decimals)
     uint256 public totalMinted;
     uint256 public rewardPool;
 
     mapping(address => uint256) public nftBalances;
-    mapping(address => uint256) public rewardMintIndex;
+    // Tracks how much reward each user has already claimed
+    mapping(address => uint256) public rewardsClaimed; 
+    
+    // Global tracking rate scaled by 1e18 to prevent precision loss
+    uint256 private totalRewardPerNFT;
 
     constructor(address _usdcToken) {
         usdcToken = _usdcToken;
     }
 
     function mintNFT() external {
-        // Transfer USDC from user to this contract safely
+        // Safe transfer of USDC from user to this contract
         IERC20(usdcToken).safeTransferFrom(msg.sender, address(this), mintPrice);
         
         nftBalances[msg.sender] += 1;
         totalMinted += 1;
         rewardPool += mintPrice;
+        
+        // Dynamic global tracking to prevent any mathematical truncation
+        totalRewardPerNFT = (rewardPool * 10**18) / totalMinted;
     }
 
     function claimReward() external {
         uint256 totalNFTs = nftBalances[msg.sender];
         require(totalNFTs > 0, "Must own at least one NFT");
         
-        // Calculate the claimable share dynamically based on the current pool
-        uint256 share = (rewardPool / totalMinted) * totalNFTs;
+        // Calculate precise share using the 1e18 multiplier
+        uint256 totalOwed = (totalRewardPerNFT * totalNFTs) / 10**18;
+        uint256 share = totalOwed - rewardsClaimed[msg.sender];
+        
         require(share > 0, "No rewards available or already claimed");
 
-        // Update the reward pool state before interaction
+        // Update state before external interaction (Checks-Effects-Interactions pattern)
+        rewardsClaimed[msg.sender] += share;
         rewardPool -= share;
-        
-        // Reset or adjust user's balance token tracking securely
-        nftBalances[msg.sender] = 0; 
 
-        // Transfer the reward share to the user safely
+        // Safe transfer of the reward tokens back to the user
         IERC20(usdcToken).safeTransfer(msg.sender, share);
     }
 }
