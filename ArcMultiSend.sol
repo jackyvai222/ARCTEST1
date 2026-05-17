@@ -4,52 +4,37 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract ArcRewardsNFT {
+contract ArcMultiSend {
     using SafeERC20 for IERC20;
 
-    address public usdcToken;
-    uint256 public mintPrice = 5 * 10**6; // 5 USDC (6 decimals)
-    uint256 public totalMinted;
-    uint256 public rewardPool;
+    /**
+     * @notice Sends a specific ERC20 token to multiple recipients in a single transaction.
+     * @param _token The address of the ERC20 token to be sent.
+     * @param _recipients An array of receiver addresses.
+     * @param _amounts An array of token amounts corresponding to each receiver.
+     */
+    function multiSendToken(
+        address _token, 
+        address[] calldata _recipients, 
+        uint256[] calldata _amounts
+    ) external {
+        uint256 length = _recipients.length;
+        require(length == _amounts.length, "Recipients and amounts length mismatch");
+        require(length > 0, "Recipients list cannot be empty");
 
-    mapping(address => uint256) public nftBalances;
-    // Tracks how much reward each user has already claimed
-    mapping(address => uint256) public rewardsClaimed; 
-    
-    // Global tracking rate scaled by 1e18 to prevent precision loss
-    uint256 private totalRewardPerNFT;
-
-    constructor(address _usdcToken) {
-        usdcToken = _usdcToken;
-    }
-
-    function mintNFT() external {
-        // Safe transfer of USDC from user to this contract
-        IERC20(usdcToken).safeTransferFrom(msg.sender, address(this), mintPrice);
+        uint256 totalAmount = 0;
         
-        nftBalances[msg.sender] += 1;
-        totalMinted += 1;
-        rewardPool += mintPrice;
-        
-        // Dynamic global tracking to prevent any mathematical truncation
-        totalRewardPerNFT = (rewardPool * 10**18) / totalMinted;
-    }
+        // Calculate the total amount needed for all transfers
+        for (uint256 i = 0; i < length; i++) {
+            totalAmount += _amounts[i];
+        }
 
-    function claimReward() external {
-        uint256 totalNFTs = nftBalances[msg.sender];
-        require(totalNFTs > 0, "Must own at least one NFT");
-        
-        // Calculate precise share using the 1e18 multiplier
-        uint256 totalOwed = (totalRewardPerNFT * totalNFTs) / 10**18;
-        uint256 share = totalOwed - rewardsClaimed[msg.sender];
-        
-        require(share > 0, "No rewards available or already claimed");
+        // Pull all tokens from the sender to this contract in ONE single transfer (Saves a lot of Gas)
+        IERC20(_token).safeTransferFrom(msg.sender, address(this), totalAmount);
 
-        // Update state before external interaction (Checks-Effects-Interactions pattern)
-        rewardsClaimed[msg.sender] += share;
-        rewardPool -= share;
-
-        // Safe transfer of the reward tokens back to the user
-        IERC20(usdcToken).safeTransfer(msg.sender, share);
+        // Distribute the tokens to all recipients safely
+        for (uint256 i = 0; i < length; i++) {
+            IERC20(_token).safeTransfer(_recipients[i], _amounts[i]);
+        }
     }
 }
